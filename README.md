@@ -3,7 +3,7 @@ This repository includes the scripts for sex difference analyses in cortical thi
 
 - Correspondence to Huantao Wen (wenh@cbs.mpg.de) and Sofie Valk (valk@cbs.mpg.de)
 - Max Planck Institute for Human Cognitive and Brain Sciences, Leipzig, Germany
-- Institute of Neuroscience and Medicine (INM-7: Brain and Behaviour), Research Center Jülich, Jülich, German
+- Institute of Neuroscience and Medicine (INM-7: Brain and Behaviour), Research Center Jülich, Jülich, Germany
 
 ### Scripts
 **Data processing**
@@ -35,7 +35,7 @@ This repository includes the scripts for sex difference analyses in cortical thi
 
 **Function**
 
-`data_combat.py` 
+`func.py` 
 - Includes helper functions for data harmonization, main statistical analysis
 
 ## 📦 Requirements
