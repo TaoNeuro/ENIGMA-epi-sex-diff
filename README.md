@@ -1,5 +1,5 @@
 # Sex-related structural alterations across common epilepsies: a worldwide ENIGMA study
-This repository includes the scripts for sex difference analyses in cortical thickness and subcortical volume data in the dataset in combination of ENIGMA-epilepsy, ECP dataset, MNI dataset. 
+This repository includes the scripts for sex difference analyses in cortical thickness and subcortical volume data in the dataset in combination of ENIGMA-epilepsy, ECP dataset, MNI dataset. Preprint: https://doi.org/10.64898/2026.06.06.730611  
 
 - Correspondence to Huantao Wen (wenh@cbs.mpg.de) and Sofie Valk (valk@cbs.mpg.de)
 - Max Planck Institute for Human Cognitive and Brain Sciences, Leipzig, Germany
