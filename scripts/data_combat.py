@@ -7,7 +7,7 @@ sys.path.append('..')
 
 from helper.func import data_combat
 
-project_dir = os.path.abspath(os.path.join(os.path.abspath(__file__), '...'))
+project_dir = os.path.abspath(os.path.join(os.path.abspath(__file__), '..', '..'))
 data_dir = os.path.join(project_dir, '...')
 results_dir = os.path.join(project_dir, '...')
 

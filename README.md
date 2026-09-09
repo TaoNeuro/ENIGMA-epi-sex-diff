@@ -33,6 +33,9 @@ This repository includes the scripts for sex difference analyses in cortical thi
 `robustness_across_datasets.ipynb`
 - Consistency of sex interaction effects analyses in TLE samples across datasets
 
+`sensitivity_interaction.ipynb`
+- Bayes factor estimations for main interaction analyses
+
 **Function**
 
 `func.py` 

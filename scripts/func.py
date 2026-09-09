@@ -6,6 +6,9 @@ from brainstat.stats.SLM import SLM
 from brainstat.stats.terms import FixedEffect
 from neuroCombat import neuroCombat
 from statsmodels.stats.multitest import fdrcorrection
+import statsmodels.api as sm
+import pymc as pm
+from scipy.stats import gaussian_kde, norm
 
 ## data harmonization
 class data_combat:
@@ -110,14 +113,16 @@ class general_linear_model:
         t_val = slm_model.t
         p_val = (ss.t.sf(abs(slm_model.t), slm_model.df) * 2).flatten()
         rejected, q_val = fdrcorrection(p_val)
-        cohen_val = slm_model.t / math.sqrt(self.biomarker.shape[0])
 
-        return {'t_values': t_val, 'q_values': q_val, 'cohen_d': cohen_val}
+        n_male = np.sum(sex == 1)
+        n_female = np.sum(sex == 0)
+        cohen_val = slm_model.t * np.sqrt(1/n_male + 1/n_female)
+
+        return {'t_values': t_val, 'p_values': p_val, 'q_values': q_val, 'cohen_d': cohen_val}
 
     def diagnosis_effects_across_sexes(self, df_name, group_col='group', age_col='age', sex_col='sex', icv_col='icv', gender='male'):
         '''this is to compare the diagnosis effects in male or female'''
-        
-        # confirm the datatype
+
         if df_name.startswith('ctx'):
             cortical_thickness = True
             volume = False
@@ -172,9 +177,13 @@ class general_linear_model:
         t_val = slm_model.t
         p_val = (ss.t.sf(abs(slm_model.t), slm_model.df) * 2).flatten()
         rejected, q_val = fdrcorrection(p_val)
-        cohen_val = slm_model.t / math.sqrt(filtered_df.shape[0])
 
-        return {'t_values': t_val, 'q_values': q_val, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}
+        n_case = np.sum(group == 1)
+        n_control = np.sum(group == 0)
+
+        cohen_val = slm_model.t.flatten() * np.sqrt(1 / n_case + 1 / n_control)
+
+        return {'t_values': t_val, 'p_values': p_val, 'q_values': q_val, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}
         
     def biomarker_comparison(self, df_name, comparison_type='group', 
                       age_col='age', sex_col='sex', icv_col='icv', group_col='group'):
@@ -272,17 +281,39 @@ class general_linear_model:
         else:
             raise ValueError("Unknown comparison type, expected: 'case_control', 'sex_in_hc', 'sex_in_epi', 'sex_group_interaction'")
         
+        ## stats
         slm_model.fit(filtered_df)
 
         t_val = slm_model.t
         p_val = (ss.t.sf(abs(slm_model.t), slm_model.df) * 2).flatten()
         rejected, q_val = fdrcorrection(p_val)
-        cohen_val = slm_model.t / math.sqrt(filtered_df.shape[0])
 
-        return {'t_values': t_val, 'q_values': q_val, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}      
+        # 95% confidence interval
+        beta_val = slm_model.ef.flatten()
+        se_val = slm_model.sd.flatten()
+        t_crit = ss.t.ppf(0.975, slm_model.df)
+        ci_lower = beta_val - t_crit * se_val
+        ci_upper = beta_val + t_crit * se_val                                                                                 
+
+        # Cohen's d
+        if comparison_type == 'case_control':
+            n_case = np.sum(group == 1)
+            n_control = np.sum(group == 0)
+            cohen_val = slm_model.t.flatten() * np.sqrt(1 / n_case + 1 / n_control)
+
+        elif comparison_type in ['sex_in_hc', 'sex_in_epi']:
+            n_male = np.sum(sex == 1)
+            n_female = np.sum(sex == 0)
+            cohen_val = slm_model.t.flatten() * np.sqrt(1 / n_male + 1 / n_female)
+
+        elif comparison_type == 'sex_group_interaction':
+            cohen_val = np.full_like(beta_val, np.nan, dtype=float)
+
+        return {'t_values': t_val, 'p_values': p_val, 'q_values': q_val, 'beta': beta_val, 
+                'ci_lower': ci_lower, 'ci_upper': ci_upper, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}      
 
     def clinical_correlate(self, df_name, comparison_type='duration', durill='durill', ao='ao', age='age',
-                            sex='sex', icv='icv'):
+                           sex='sex', icv='icv'):
         """      
         Parameters:
         df: Dataframe to be analyzed
@@ -308,7 +339,6 @@ class general_linear_model:
             epi_type = 'ige'
         else:
             epi_type = 'allepi'       
-
 
         sex = self.demo[sex].copy().to_numpy().astype(float)
         sex[sex == 1] = 1
@@ -384,12 +414,22 @@ class general_linear_model:
 
         slm_model.fit(self.biomarker)
 
+        # stats
         t_val = slm_model.t
         p_val = (ss.t.sf(abs(slm_model.t), slm_model.df) * 2).flatten()
         rejected, q_val = fdrcorrection(p_val)
-        cohen_val = slm_model.t / math.sqrt(self.biomarker.shape[0])
 
-        return {'t_values': t_val, 'q_values': q_val, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}
+        # beta and 95% confidence interval
+        beta_val = slm_model.ef.flatten()
+        se_val = slm_model.sd.flatten()
+
+        t_crit = ss.t.ppf(0.975, slm_model.df)
+
+        ci_lower = beta_val - t_crit * se_val
+        ci_upper = beta_val + t_crit * se_val
+
+        return {'t_values': t_val, 'p_values': p_val, 'q_values': q_val, 'beta': beta_val, 
+                'ci_lower': ci_lower, 'ci_upper': ci_upper, 'epilepsy_type': epi_type}
     
     def clinical_correlate_across_sexes(self, df_name, durill_col='durill', ao_col='ao', age_col='age',
                                         sex_col='sex', icv_col='icv', gender='male', correlate_variable='durill'):
@@ -450,7 +490,7 @@ class general_linear_model:
             else:  
                 model = term_ao + term_icv
                 slm_model = SLM(model, contrast=model.ao)
-        elif correlate_variable == 'age':
+        elif correlate_variable == 'age':                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
             if cortical_thickness:
                 model = term_age
                 slm_model = SLM(model, contrast=model.age)
@@ -462,9 +502,119 @@ class general_linear_model:
 
         slm_model.fit(filtered_df)
 
+        # stats
         t_val = slm_model.t
         p_val = (ss.t.sf(abs(slm_model.t), slm_model.df) * 2).flatten()
         rejected, q_val = fdrcorrection(p_val)
-        cohen_val = slm_model.t / math.sqrt(filtered_df.shape[0])
 
-        return {'t_values': t_val, 'q_values': q_val, 'cohen_d': cohen_val, 'epilepsy_type': epi_type}
+        # beta and 95% confidence interval
+        beta_val = slm_model.ef.flatten()
+        se_val = slm_model.sd.flatten()
+
+        t_crit = ss.t.ppf(0.975, slm_model.df)
+
+        ci_lower = beta_val - t_crit * se_val
+        ci_upper = beta_val + t_crit * se_val
+
+        return {'t_values': t_val, 'p_values': p_val, 'q_values': q_val, 'beta': beta_val, 
+                'ci_lower': ci_lower, 'ci_upper': ci_upper, 'epilepsy_type': epi_type} 
+
+def bayes_factor_interaction(demo, biomarker, df_name, comparison_type='sex_group_interaction',
+                            group_col='Dx', age_col='Age', sex_col='Sex', icv_col='ICV',
+                            durill_col='DURILL', ao_col='AO', regions=None):
+    """
+    Computes Bayes Factors (BF10 and BF01) for interaction terms in a General Linear Model 
+    using the Bayesian Information Criterion (BIC) approximation method.
+    """
+    
+    # Check data type to determine if ICV should be included
+    if df_name.startswith('ctx'): 
+        cortical = True
+    elif df_name.startswith('sv'): 
+        cortical = False
+    else: 
+        raise ValueError("Expected df_name prefix to be 'ctx' or 'sv'")
+
+    demo = demo.loc[biomarker.index].copy()
+    
+    if regions is None: 
+        regions = biomarker.columns.tolist()
+    elif isinstance(regions, str): 
+        regions = [regions]
+
+    bf10_values, bf01_values = [], []
+    beta_values, ci_lower, ci_upper = [], [], []
+
+    for region in regions:
+        
+        if comparison_type == 'sex_group_interaction': 
+            cols = [group_col, age_col, sex_col]
+            main_effect_col = group_col
+        elif comparison_type == 'duration_sex_interaction': 
+            cols = [durill_col, sex_col]
+            main_effect_col = durill_col
+        elif comparison_type == 'ao_sex_interaction': 
+            cols = [ao_col, sex_col]
+            main_effect_col = ao_col
+        elif comparison_type == 'age_sex_interaction': 
+            cols = [age_col, sex_col]
+            main_effect_col = age_col
+        else: 
+            raise ValueError('Unknown comparison_type')
+
+        # Add ICV covariate for subcortical/volume data
+        if not cortical: 
+            cols.append(icv_col)
+
+        # Prepare regression dataframe and drop missing values
+        dat = demo[cols].copy()
+        dat['y'] = biomarker[region]
+        dat = dat.dropna()
+
+        # Binarize sex (1 vs 0) for stable interaction interpretation
+        dat[sex_col] = np.where(dat[sex_col] == 1, 1, 0)
+        
+        # Create the interaction term explicitely
+        dat['interaction'] = dat[sex_col] * dat[main_effect_col]
+
+        # Define variables for Null and Alternative models
+        y = dat['y']
+        
+        # Null Model: Contains main effects and covariates, NO interaction
+        X_null = dat[cols].copy()
+        X_null = sm.add_constant(X_null)
+        
+        # Alternative Model: Contains main effects, covariates, AND the interaction term
+        X_alt = dat[cols + ['interaction']].copy()
+        X_alt = sm.add_constant(X_alt)
+
+        # Fit ordinary least squares (OLS) models
+        model_null = sm.OLS(y, X_null).fit()
+        model_alt = sm.OLS(y, X_alt).fit()
+
+        # Compute Bayes Factors using the BIC approximation (Wagenmakers, 2007)
+        # BF01: Evidence for the Null Model (No interaction effect)
+        # BF10: Evidence for the Alternative Model (Significant interaction effect)
+        delta_bic_01 = model_alt.bic - model_null.bic
+        bf01 = np.exp(delta_bic_01 / 2)
+        bf10 = 1 / bf01
+
+        # Extract beta coefficients and 95% CI for the interaction term
+        beta_interact = model_alt.params['interaction']
+        ci_interact = model_alt.conf_int(alpha=0.05).loc['interaction']
+
+        # Append results
+        bf10_values.append(bf10)
+        bf01_values.append(bf01)
+        beta_values.append(beta_interact)
+        ci_lower.append(ci_interact[0])
+        ci_upper.append(ci_interact[1])
+
+    return {
+        'regions': np.array(regions),
+        'BF10': np.array(bf10_values),
+        'BF01': np.array(bf01_values),
+        'beta': np.array(beta_values),
+        'ci_lower': np.array(ci_lower),
+        'ci_upper': np.array(ci_upper)
+    }
